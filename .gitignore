@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.egg-info/
+
+# Data & models — never commit raw FinTrust data or trained model binaries
+data/
+*.csv
+*.pkl
+*.joblib
+*.h5
+
+# Environment / secrets
+.env
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

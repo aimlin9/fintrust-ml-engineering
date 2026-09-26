@@ -1,0 +1,30 @@
+# Pipeline configuration — kept separate from code so environment
+# settings don't require source changes (per technical-requirements.md).
+
+input_fields:
+  transaction:
+    - Transaction_ID
+    - Customer_ID
+    - Transaction_DateTime
+    - Transaction_Type
+    - Amount_NGN
+    - Channel
+    - Device_Type
+    - Location
+    - International_Transaction
+    - Transaction_Status
+  join_key: Customer_ID
+
+missing_value_defaults:
+  Device_Type: "Unknown"
+  Location: "Unknown"
+
+output_fields:
+  - Transaction_ID
+  - Customer_ID
+  - risk_review_prediction
+  - risk_review_probability
+
+model:
+  version: "mock-0.1"
+  path: null  # set once Data Science delivers a trained artifact
