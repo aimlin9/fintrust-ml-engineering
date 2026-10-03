@@ -7,6 +7,7 @@ venv/
 
 # Data & models — never commit raw FinTrust data or trained model binaries
 data/
+models/
 *.csv
 *.pkl
 *.joblib

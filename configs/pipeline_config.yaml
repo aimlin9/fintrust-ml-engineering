@@ -19,6 +19,56 @@ missing_value_defaults:
   Device_Type: "Unknown"
   Location: "Unknown"
 
+# Fixed category -> code mapping, shared by the batch pipeline and the
+# API (src/preprocessing/preprocess.py, src/service/api.py). This
+# replaces the Week 2 approach of encoding each batch relative to
+# itself (pandas .cat.codes), which gave inconsistent codes for a
+# single-row API request vs. a full-CSV batch. Values are fixed and
+# alphabetically ordered from the categories observed in the real
+# FinTrust transaction data (including "Unknown" for Device_Type /
+# Location after missing-value fill). A category seen at inference
+# that isn't listed here encodes to -1 (see preprocess.py) rather than
+# silently colliding with a real code.
+categorical_encodings:
+  Transaction_Type:
+    Airtime/Data: 0
+    Bill Payment: 1
+    Card Purchase: 2
+    Cash Withdrawal: 3
+    Deposit: 4
+    Transfer: 5
+  Channel:
+    ATM: 0
+    Mobile App: 1
+    POS: 2
+    USSD: 3
+    Web: 4
+  Device_Type:
+    ATM Terminal: 0
+    Android: 1
+    POS Terminal: 2
+    Unknown: 3
+    Web Browser: 4
+    iOS: 5
+  Location:
+    Abuja: 0
+    Benin City: 1
+    Enugu: 2
+    Ibadan: 3
+    Kaduna: 4
+    Kano: 5
+    Lagos: 6
+    Port Harcourt: 7
+    Unknown: 8
+  International_Transaction:
+    "No": 0
+    "Yes": 1
+  Transaction_Status:
+    Failed: 0
+    Pending: 1
+    Reversed: 2
+    Successful: 3
+
 output_fields:
   - Transaction_ID
   - Customer_ID
@@ -26,5 +76,9 @@ output_fields:
   - risk_review_probability
 
 model:
-  version: "mock-0.1"
-  path: null  # set once Data Science delivers a trained artifact
+  # Week 3: no Data Science model was available to integrate (solo on
+  # this track), so this is ML Engineering's own development model,
+  # trained on the real FinTrust data — not a Data Science deliverable.
+  # See docs/risks.md and docs/week3-project-summary.md.
+  version: "mle-dev-logreg-0.1"
+  path: "models/risk_review_model.pkl"

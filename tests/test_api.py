@@ -1,23 +1,33 @@
 """
-Tests for src/service/api.py (the optional Week 2 API/service
-component). Uses FastAPI's TestClient, which drives the app directly
-in-process — no need to run uvicorn for these tests.
+Tests for src/service/api.py. Uses FastAPI's TestClient, which drives
+the app directly in-process — no need to run uvicorn for these tests.
+
+These tests inject the known placeholder RiskModel (rather than
+whatever happens to be at configs/pipeline_config.yaml's model.path)
+so assertions stay deterministic and don't depend on a trained model
+file existing, or on that model's coefficients after a future
+retraining run. Confirming the API uses the REAL trained model when
+one is present is covered separately in test_model_interface.py
+(test_load_model_loads_trained_model_file_when_present) and by
+docs/testing-strategy.md's end-to-end run.
 """
 
 import pytest
 from fastapi.testclient import TestClient
 
 from src.service import api
+from src.model.model_interface import RiskModel
 
 client = TestClient(api.app)
 
 
 @pytest.fixture(autouse=True)
-def _use_throwaway_customer_table(tmp_path, monkeypatch):
+def _use_throwaway_customer_table_and_mock_model(tmp_path, monkeypatch):
     """
     Point the API at a small, temporary customer table for each test,
     instead of the real data/ CSV (which is gitignored and may not
-    exist on every machine that runs the tests).
+    exist on every machine that runs the tests), and inject the known
+    placeholder model so prediction assertions are deterministic.
     """
     customer_csv = tmp_path / "customers.csv"
     customer_csv.write_text(
@@ -26,7 +36,7 @@ def _use_throwaway_customer_table(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(api, "_CUSTOMER_DATA_PATH", str(customer_csv))
     monkeypatch.setattr(api, "_customer_df", None)
-    monkeypatch.setattr(api, "_model", None)
+    monkeypatch.setattr(api, "_model", RiskModel(model_version="mock-0.1"))
 
 
 def _valid_transaction(**overrides):

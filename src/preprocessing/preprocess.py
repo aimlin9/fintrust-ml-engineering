@@ -33,18 +33,28 @@ def parse_datetime(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def encode_categoricals(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Encodes categorical fields using the fixed category -> code mapping
+    in configs/pipeline_config.yaml (categorical_encodings).
+
+    Week 3 change: this used to call pandas' `.astype("category").cat.codes`,
+    which assigns codes relative to whichever categories are present in
+    the DataFrame being encoded. That's fine for a full-CSV batch, but
+    it silently breaks for a single-row request (e.g. the API) — a lone
+    "Yes" has nothing else to be relative to, so it always encoded to 0.
+    Using one fixed mapping for both the batch pipeline and the API
+    closes that gap: the same value always encodes to the same code,
+    regardless of batch size. A value not present in the mapping (not
+    seen in the data this mapping was built from) encodes to -1 rather
+    than silently colliding with a real code, so it stays visible as a
+    data-quality case rather than quietly corrupting a feature.
+    """
     df = df.copy()
-    categorical_cols = [
-        "Transaction_Type",
-        "Channel",
-        "Device_Type",
-        "Location",
-        "International_Transaction",
-        "Transaction_Status",
-    ]
-    for col in categorical_cols:
+    config = _load_config()
+    encodings = config.get("categorical_encodings", {})
+    for col, mapping in encodings.items():
         if col in df.columns:
-            df[col] = df[col].astype("category").cat.codes
+            df[col] = df[col].map(mapping).fillna(-1).astype(int)
     return df
 
 

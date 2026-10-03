@@ -1,12 +1,14 @@
 """
-Service stage — optional advanced component (Week 2 brief). Exposes
-the pipeline as a request/response prediction service: a single
+Service stage — request/response prediction service: a single
 transaction in, a risk-review prediction out.
 
-Reuses the same validation, feature-joining, and model stages as
-pipeline.py (the batch path) so there is one source of truth for each
-piece of logic. The one deliberate divergence — single-row categorical
-encoding — is explained in _encode_single_transaction() below.
+Reuses the same validation, preprocessing, feature-joining, and model
+stages as pipeline.py (the batch path) so there is one source of truth
+for each piece of logic. As of Week 3, preprocessing (including
+categorical encoding) uses the same fixed, config-driven mapping for
+both the batch pipeline and this API — see
+src/preprocessing/preprocess.py::encode_categoricals for why that
+matters and what it replaced.
 
 Run locally with:
     uvicorn src.service.api:app --reload
@@ -23,14 +25,14 @@ from typing import Optional
 
 from src.validation.schema_validator import validate_transaction_row
 from src.ingestion.data_loader import load_customer_data
-from src.preprocessing.preprocess import fill_missing
-from src.features.feature_pipeline import join_customer_transaction, select_model_fields
+from src.preprocessing.preprocess import preprocess
+from src.features.feature_pipeline import build_features
 from src.model.model_interface import load_model
 
 app = FastAPI(
     title="FinTrust Risk Review API",
-    description="Optional Week 2 service concept — single-transaction risk-review prediction.",
-    version="0.1.0",
+    description="Single-transaction risk-review prediction service.",
+    version="0.2.0",
 )
 
 _CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "pipeline_config.yaml")
@@ -84,33 +86,6 @@ class PredictionResponse(BaseModel):
     risk_review_probability: float
 
 
-def _encode_single_transaction(row: dict) -> dict:
-    """
-    Deterministic, row-level encoding for a single transaction.
-
-    KNOWN LIMITATION (documented decision, not an oversight): the batch
-    pipeline's encode_categoricals() (src/preprocessing/preprocess.py)
-    encodes each column with pandas' `.cat.codes`, which assigns codes
-    relative to whatever categories are present in that specific batch.
-    That's fine when scoring a full CSV (pipeline.py), but it is NOT
-    safe for a single-row API request: a lone "Yes" or "No" value would
-    always encode to category code 0, since there's only one category
-    in a "batch" of one row. Left as-is, the mock model's
-    International_Transaction check would never fire for a real-time
-    request.
-
-    Real fix (Week 3+, once Data Science's category scheme is final):
-    agree a fixed category-to-code mapping and load it from config, so
-    the batch pipeline and this API always encode the same value the
-    same way. Until then, this function hardcodes the one mapping the
-    mock model actually depends on, so this endpoint is correct today
-    without pretending the underlying encoding approach is finished.
-    """
-    encoded = dict(row)
-    encoded["International_Transaction"] = 1 if row.get("International_Transaction") == "Yes" else 0
-    return encoded
-
-
 @app.post("/predict", response_model=PredictionResponse)
 def predict(transaction: TransactionRequest):
     row = transaction.model_dump()
@@ -119,18 +94,18 @@ def predict(transaction: TransactionRequest):
     if not validation_result.is_valid:
         raise HTTPException(status_code=422, detail=validation_result.errors)
 
-    transaction_df = fill_missing(pd.DataFrame([row]))
+    # Same preprocess() sequence as the batch pipeline (fill_missing ->
+    # parse_datetime -> encode_categoricals), so a single request is
+    # preprocessed identically to a row inside a full-CSV batch.
+    transaction_df = preprocess(pd.DataFrame([row]))
 
     customer_df = _get_customer_df()
-    joined = join_customer_transaction(customer_df, transaction_df)
-    if joined.empty:
+    features_df = build_features(customer_df, transaction_df)
+    if features_df.empty:
         raise HTTPException(
             status_code=404,
             detail=f"Customer_ID {row['Customer_ID']} not found in customer records",
         )
-
-    encoded_row = _encode_single_transaction(joined.iloc[0].to_dict())
-    features_df = select_model_fields(pd.DataFrame([encoded_row]))
 
     model = _get_model()
     prediction_df = model.predict(features_df)

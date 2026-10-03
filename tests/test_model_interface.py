@@ -1,16 +1,22 @@
 """
 Tests for src/model/model_interface.py.
 
-This is a MOCK model (see the module's own docstring) — these tests
-confirm the interface contract (one prediction + one probability per
-row) and the placeholder scoring rule behave as documented, not that
-the model is "correct" in any trained sense.
+Covers both models behind the shared predict() contract:
+- RiskModel, the placeholder rule (kept as the fallback when no
+  trained model file exists) — these tests confirm the interface
+  contract and the rule's documented behaviour, not that it is
+  "correct" in any trained sense.
+- TrainedRiskModel, which wraps a real scikit-learn classifier trained
+  by src/model/train.py (Week 3) — and load_model()'s choice between
+  the two based on whether a trained model file is present.
 """
 
+import joblib
 import pandas as pd
 import pytest
+from sklearn.linear_model import LogisticRegression
 
-from src.model.model_interface import RiskModel, load_model
+from src.model.model_interface import RiskModel, TrainedRiskModel, load_model
 
 
 def _features_df(rows):
@@ -89,3 +95,94 @@ def test_load_model_defaults_when_version_missing():
     model = load_model({})
 
     assert model.model_version == "mock-0.1"
+
+
+# ---------------------------------------------------------------------
+# TrainedRiskModel / load_model's trained-vs-mock fallback (Week 3)
+# ---------------------------------------------------------------------
+
+def _tiny_trained_bundle(tmp_path):
+    """
+    A small, fast, fully-deterministic trained model bundle — not meant
+    to be a good classifier, just a real one with the exact shape
+    TrainedRiskModel expects, for testing model LOADING and the
+    predict() contract rather than model quality.
+    """
+    feature_columns = ["Transaction_Type", "Amount_NGN", "International_Transaction"]
+    X = pd.DataFrame(
+        {
+            "Transaction_Type": [0, 1, 2, 3, 4, 5, 0, 1],
+            "Amount_NGN": [100.0, 200.0, 90000.0, 80000.0, 150.0, 120.0, 95000.0, 110.0],
+            "International_Transaction": [0, 0, 1, 1, 0, 0, 1, 0],
+        }
+    )
+    y = [0, 0, 1, 1, 0, 0, 1, 0]
+
+    model = LogisticRegression()
+    model.fit(X, y)
+
+    bundle_path = tmp_path / "tiny_model.pkl"
+    joblib.dump({"model": model, "feature_columns": feature_columns, "version": "test-tiny-0.1"}, bundle_path)
+    return str(bundle_path), feature_columns
+
+
+def test_trained_risk_model_from_file_loads_and_predicts(tmp_path):
+    bundle_path, feature_columns = _tiny_trained_bundle(tmp_path)
+
+    model = TrainedRiskModel.from_file(bundle_path)
+    features_df = pd.DataFrame(
+        [{"Transaction_Type": 2, "Amount_NGN": 90000.0, "International_Transaction": 1}]
+    )
+
+    result = model.predict(features_df)
+
+    # Same output contract as RiskModel: exactly these two columns.
+    assert list(result.columns) == ["risk_review_prediction", "risk_review_probability"]
+    assert len(result) == 1
+    assert result.loc[0, "risk_review_prediction"] in (0, 1)
+    assert 0.0 <= result.loc[0, "risk_review_probability"] <= 1.0
+    assert model.model_version == "test-tiny-0.1"
+
+
+def test_trained_risk_model_ignores_extra_columns(tmp_path):
+    """
+    features_df coming out of the pipeline carries Transaction_ID,
+    Customer_ID, Transaction_DateTime etc. alongside the model's actual
+    feature columns. predict() must select only feature_columns, not
+    choke on or accidentally use the extras.
+    """
+    bundle_path, _ = _tiny_trained_bundle(tmp_path)
+    model = TrainedRiskModel.from_file(bundle_path)
+
+    features_df = pd.DataFrame(
+        [{
+            "Transaction_ID": "FT-T000001",
+            "Customer_ID": "FT-C00001",
+            "Transaction_Type": 2,
+            "Amount_NGN": 90000.0,
+            "International_Transaction": 1,
+        }]
+    )
+
+    result = model.predict(features_df)
+    assert len(result) == 1
+
+
+def test_load_model_loads_trained_model_file_when_present(tmp_path):
+    bundle_path, _ = _tiny_trained_bundle(tmp_path)
+    config = {"model": {"version": "ignored-when-path-is-set", "path": bundle_path}}
+
+    model = load_model(config)
+
+    assert isinstance(model, TrainedRiskModel)
+    assert model.model_version == "test-tiny-0.1"
+
+
+def test_load_model_falls_back_to_mock_when_file_missing(tmp_path, capsys):
+    missing_path = str(tmp_path / "does_not_exist.pkl")
+    config = {"model": {"version": "mock-0.1", "path": missing_path}}
+
+    model = load_model(config)
+
+    assert isinstance(model, RiskModel)
+    assert "Warning" in capsys.readouterr().out
