@@ -18,7 +18,11 @@ from fastapi.testclient import TestClient
 from src.service import api
 from src.model.model_interface import RiskModel
 
-client = TestClient(api.app)
+# raise_server_exceptions=False so TestClient returns the actual HTTP
+# response our global exception handler produces (see api.py), instead
+# of re-raising the original exception into the test itself — needed
+# for test_predict_unexpected_error_returns_safe_500 below.
+client = TestClient(api.app, raise_server_exceptions=False)
 
 
 @pytest.fixture(autouse=True)
@@ -110,3 +114,26 @@ def test_predict_unknown_customer_returns_404():
     response = client.post("/predict", json=row)
 
     assert response.status_code == 404
+
+
+def test_predict_unexpected_error_returns_safe_500(monkeypatch):
+    """
+    Week 4 finalization: an unexpected failure (a broken model, a bug —
+    anything that isn't the validation/unknown-customer cases above)
+    must not leak a raw traceback to the caller. Simulate one by making
+    the loaded model's predict() blow up, and confirm the global
+    exception handler in api.py turns it into a generic, safe 500
+    instead of FastAPI's default error page.
+    """
+    class _BrokenModel:
+        model_version = "broken-for-test"
+
+        def predict(self, features_df):
+            raise RuntimeError("simulated model failure")
+
+    monkeypatch.setattr(api, "_model", _BrokenModel())
+
+    response = client.post("/predict", json=_valid_transaction())
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal error while processing the request."}

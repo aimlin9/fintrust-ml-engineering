@@ -14,13 +14,18 @@ structured prediction.
 
 ## Status
 
-Week 3 — integration-ready development. The full pipeline (ingestion,
+**Week 4 — final submission.** The full pipeline (ingestion,
 validation, preprocessing, feature preparation, model, prediction,
-output) is implemented and tested, with a request/response API on top.
-No Data Science model was available to integrate (solo on this track),
-so the model stage now runs ML Engineering's own trained development
-model (`src/model/train.py`) rather than the Week 2 placeholder rule —
-see `docs/risks.md` and `docs/week3-project-summary.md`.
+output) is implemented and tested end to end, with a request/response
+API on top that now has consistent error handling for every case:
+invalid input (422), unknown customer (404), and any unexpected
+failure (500, without leaking internals). No Data Science model was
+ever received across Weeks 1–4 (solo on this track, confirmed again at
+the start of Week 4), so the model stage runs ML Engineering's own
+trained development model (`src/model/train.py`), honestly labelled as
+such throughout. See `docs/risks.md` for final limitations,
+`docs/week4-integration-note.md` for the cross-track status, and
+`docs/week4-project-summary.md` for the full final report.
 
 ## Project structure
 
@@ -33,7 +38,7 @@ fintrust-ml-engineering/
 ├── README.md
 ├── requirements.txt
 ├── .gitignore
-├── docs/                   # Week 1-3 technical documentation
+├── docs/                   # Week 1-4 technical documentation
 ├── src/
 │   ├── ingestion/          # Loads raw customer & transaction data
 │   ├── validation/         # Schema / data-quality checks
@@ -85,7 +90,9 @@ uvicorn src.service.api:app --reload
 
 Then `POST` a transaction as JSON to `http://127.0.0.1:8000/predict`
 (see `src/service/api.py` for the request/response shape), or `GET
-/health` to confirm which model version is loaded.
+/health` to confirm which model version is loaded. The API returns
+`422` for invalid input, `404` for an unmatched `Customer_ID`, and a
+generic `500` (no internal detail) for anything unexpected.
 
 **5. Interpret the output**
 
@@ -112,9 +119,24 @@ pytest tests/ -v
 - Uses static CSV snapshots (`FinTrust_Customer_Data.csv`,
   `FinTrust_Transaction_Data.csv`), not a live data source.
 - The model is ML Engineering's own development model (trained on the
-  real FinTrust data), not a Data Science deliverable — see
-  `docs/risks.md` and `docs/week3-project-summary.md` for its actual
-  performance and limitations.
+  real FinTrust data), not a Data Science deliverable — no Data
+  Science model or interface was ever received across Weeks 1–4. See
+  `docs/risks.md` and `docs/week4-project-summary.md` for its actual
+  performance and final limitations.
 - Intentional missing values exist in `Device_Type` and `Location`.
 - `Risk_Review_Flag` is a synthetic, educational target and must never
   be represented as real fraud detection.
+- This is a prototype, not a production banking system: no
+  authentication on the API, no load testing, validated against one
+  dataset snapshot only. See `docs/risks.md`'s final limitations and
+  responsible-use statement.
+
+## Further documentation
+
+- `docs/architecture.md`, `docs/technical-requirements.md` — design
+- `docs/testing-strategy.md`, `docs/week4-final-testing.md` — testing
+- `docs/validation-refinement.md` — the Week 3 refinement log
+- `docs/risks.md` — risk register, final limitations, responsible use
+- `docs/week4-integration-note.md` — cross-track integration status
+- `docs/week2-project-summary.md`, `docs/week3-project-summary.md`,
+  `docs/week4-project-summary.md` — weekly project summaries

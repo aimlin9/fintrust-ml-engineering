@@ -15,11 +15,13 @@ Run locally with:
 Then POST a transaction to http://127.0.0.1:8000/predict
 """
 
+import logging
 import os
 
 import pandas as pd
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -29,11 +31,30 @@ from src.preprocessing.preprocess import preprocess
 from src.features.feature_pipeline import build_features
 from src.model.model_interface import load_model
 
+logger = logging.getLogger("fintrust.api")
+
 app = FastAPI(
     title="FinTrust Risk Review API",
     description="Single-transaction risk-review prediction service.",
     version="0.2.0",
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """
+    Week 4 finalization: HTTPException (422/404) already gives callers a
+    clean, specific error. Anything else — a corrupt model file, a config
+    problem, a bug — would otherwise reach the client as FastAPI's raw
+    500 traceback. This logs the real exception server-side and returns
+    a generic, safe message instead, so the API never leaks internals.
+    See docs/week4-final-testing.md for the test covering this path.
+    """
+    logger.exception("Unhandled error while processing %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal error while processing the request."},
+    )
 
 _CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "pipeline_config.yaml")
 _CUSTOMER_DATA_PATH = os.environ.get(

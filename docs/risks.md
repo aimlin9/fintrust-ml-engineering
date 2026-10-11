@@ -1,17 +1,48 @@
 # Technical Risks
 
-## Status as of Week 3
+## Status as of Week 4 (final)
 
 | Risk | Status | Note |
 |------|--------|------|
-| Static CSV input | Open, unchanged | Still a static snapshot; interface unchanged. |
-| Invalid input data | Mitigated | Unchanged since Week 2; covered by validation tests. |
+| Static CSV input | Open, unchanged | Still a static snapshot; interface unchanged. Not revisited in Week 4 — out of scope for a solo, time-boxed track. |
+| Invalid input data | Mitigated | Unchanged since Week 2; covered by validation tests, both batch and API. |
 | Model version mismatch | Mitigated | `model.version`/`model.path` in config; `/health` and every prediction record which model produced it. |
 | Unmatched Customer_ID | Mitigated | Unchanged since Week 2. |
-| Data leakage | Mitigated, extended | Week 2 mitigation covered inference; Week 3 applies the same safeguard to training (`src/model/train.py` pulls the target out before `preprocess()`/`join_customer_transaction()` run — see `docs/validation-refinement.md`, Entry 2). |
-| Dependency on Data Science track | Partially resolved | No Data Science model was delivered (solo on this track). Per the Week 3 brief's explicit allowance, ML Engineering trained its own development model (`src/model/train.py`) rather than continuing to wait on the placeholder. This resolves the *pipeline-integration* half of the risk; it introduces a new, separate limitation below. |
-| **New: single-row vs. batch encoding inconsistency** (Week 2 limitation) | **Resolved in Week 3** | Fixed, config-driven categorical mapping (`configs/pipeline_config.yaml`) now used by both the batch pipeline and the API; see `docs/validation-refinement.md`, Entry 1. |
-| **New: development model's real performance is modest** | Open, documented | The trained model (logistic regression, see below) has low precision (~0.28) at the recall level it was tuned for. This is reported honestly, not treated as a solved problem — see "Known limitations" below and `docs/week3-project-summary.md`. |
+| Data leakage | Mitigated, extended | Week 2 mitigation covered inference; Week 3 extended it to training (`src/model/train.py` pulls the target out before `preprocess()`/`join_customer_transaction()` run). Unchanged in Week 4. |
+| Dependency on Data Science track | Closed for this submission | No Data Science model or interface was received at any point across Weeks 1–4 (confirmed again in Week 4 — still solo on this track). ML Engineering's own development model stands as the final model for this submission, honestly labelled as such throughout. If a Data Science model is handed over after submission, `load_model()` is the single integration point. |
+| Single-row vs. batch encoding inconsistency (Week 2 limitation) | Resolved in Week 3 | Fixed, config-driven categorical mapping (`configs/pipeline_config.yaml`) used by both the batch pipeline and the API; see `docs/validation-refinement.md`, Entry 1. Unchanged in Week 4. |
+| Development model's real performance is modest | Open, documented | The trained model (logistic regression, see below) has low precision (~0.28) at the recall level it was tuned for. Reported honestly as a final limitation, not treated as solved. No further tuning was attempted in Week 4 — see "Final limitations" below and `docs/week4-project-summary.md` for why. |
+| **New: API unhandled-exception leakage** | **Resolved in Week 4** | An unexpected failure (not a validation or unknown-customer case) previously reached the caller as FastAPI's default 500 page. Fixed with a global exception handler; see `docs/week4-final-testing.md`. |
+
+## Final limitations and responsible-use statement (Week 4, Section 11)
+
+This submission is an educational prototype, not a production banking
+system, and should not be read as one:
+
+- **FinTrust Digital Bank is a fictional organisation**, built for this
+  internship programme. Nothing here reflects a real bank's data,
+  policies, or systems.
+- **All data is synthetic.** `FinTrust_Customer_Data.csv` and
+  `FinTrust_Transaction_Data.csv` were generated for this exercise.
+- **`Risk_Review_Flag` is a synthetic, educational target.** A `1`
+  prediction from this pipeline is not evidence of fraud, financial
+  crime, or any real risk event, and must never be presented as such.
+- **This is not a production-ready system.** It has not been load-
+  tested, has no authentication on the API, and has only been
+  validated against one dataset snapshot (12,000 transactions).
+- **The model's precision is low (~0.28).** At the current setting,
+  roughly 3 in 4 flagged transactions are false positives. Any
+  downstream use of its output should treat predictions as a weak
+  signal to investigate, not a verdict.
+- **This component makes no personalised financial, investment, or
+  legal recommendations** — it returns a binary review flag and a
+  probability, nothing else, and that scope was intentionally kept
+  narrow.
+- **Unsupported assumption, stated plainly:** that the real FinTrust
+  data's category values and distributions (6 transaction types, 5
+  channels, ~20% positive rate, etc.) are representative of ongoing
+  production traffic. This was not validated against any out-of-sample
+  period, because none exists for this synthetic dataset.
 
 ## Full risk register
 
